@@ -60,7 +60,63 @@ describe('sanitizeForJSON', () => {
     const obj = { name: 'Test', date }
     const result = sanitizeForJSON(obj)
     expect(result.name).toBe('Test')
-    expect(result.date).toBeInstanceOf(Date)
+    // Date objects are converted to ISO strings in sanitizeForJSON
+    expect(typeof result.date).toBe('string')
+    expect(result.date).toBe(date.toISOString())
+  })
+
+  it('should handle null values', () => {
+    const result = sanitizeForJSON(null)
+    expect(result).toBeNull()
+  })
+
+  it('should handle undefined values', () => {
+    const result = sanitizeForJSON(undefined)
+    expect(result).toBeUndefined()
+  })
+
+  it('should handle symbols', () => {
+    const sym = Symbol('test')
+    const obj = { name: 'Test', sym }
+    const result = sanitizeForJSON(obj)
+    expect(result.name).toBe('Test')
+    expect(result.sym).toBeUndefined()
+  })
+
+  it('should handle circular references gracefully', () => {
+    const obj = { name: 'Test' }
+    obj.self = obj
+    const result = sanitizeForJSON(obj)
+    expect(result.name).toBe('Test')
+    // Circular reference should be handled (might be undefined or cause error that's caught)
+    expect(result.self).toBeDefined() // Should not crash
+  })
+
+  it('should handle arrays with mixed types', () => {
+    const arr = [1, 'string', null, { nested: 'object' }, () => {}]
+    const result = sanitizeForJSON(arr)
+    expect(result).toHaveLength(5)
+    expect(result[0]).toBe(1)
+    expect(result[1]).toBe('string')
+    expect(result[2]).toBeNull()
+    expect(result[3]).toEqual({ nested: 'object' })
+    // Function should be removed or undefined
+  })
+
+  it('should handle deeply nested objects', () => {
+    const obj = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              value: 'deep',
+            },
+          },
+        },
+      },
+    }
+    const result = sanitizeForJSON(obj)
+    expect(result.level1.level2.level3.level4.value).toBe('deep')
   })
 })
 

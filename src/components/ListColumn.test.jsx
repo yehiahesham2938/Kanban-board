@@ -179,17 +179,21 @@ describe('ListColumn', () => {
       { wrapper }
     )
 
-    // Find archive button (usually a menu button or icon)
-    const archiveButtons = screen.queryAllByLabelText(/archive/i)
-    if (archiveButtons.length > 0) {
-      fireEvent.click(archiveButtons[0])
-      await waitFor(() => {
-        expect(mockOnArchiveList).toHaveBeenCalledWith('list-1')
-      })
-    } else {
-      // If no archive button found, skip this test
-      expect(true).toBe(true)
-    }
+    // Find archive button and click it to open dialog
+    const archiveButton = screen.getByLabelText(/archive list/i)
+    fireEvent.click(archiveButton)
+    
+    // Wait for dialog to appear and click confirm
+    await waitFor(() => {
+      expect(screen.getByText(/archive list/i)).toBeInTheDocument()
+    })
+    
+    const confirmButton = screen.getByRole('button', { name: /confirm/i })
+    fireEvent.click(confirmButton)
+    
+    await waitFor(() => {
+      expect(mockOnArchiveList).toHaveBeenCalledWith('list-1')
+    })
   })
 
   it('should render empty state when list has no cards', () => {

@@ -140,6 +140,9 @@ describe('useUndoRedo', () => {
       result.current.addToHistory(state2)
     })
 
+    expect(result.current.currentState).toEqual(state2)
+    expect(result.current.historyLength).toBe(3) // initialState, state1, state2
+
     act(() => {
       result.current.undo()
     })
@@ -150,6 +153,7 @@ describe('useUndoRedo', () => {
       result.current.addToHistory(state3)
     })
 
+    // After undo and adding new state, history should be: initialState, state1, state3
     expect(result.current.historyLength).toBe(3)
     expect(result.current.currentState).toEqual(state3)
     expect(result.current.canRedo).toBe(false)
@@ -165,8 +169,12 @@ describe('useUndoRedo', () => {
       result.current.addToHistory({ lists: [{ id: '4' }] })
     })
 
+    // With maxHistorySize=3, after adding 4 states (plus initial), 
+    // we should have 3 states total (oldest removed)
+    // The last 3 should be: state with id '2', id '3', id '4'
     expect(result.current.historyLength).toBe(3)
-    expect(result.current.currentState.lists[0].id).toBe('2')
+    // Current state should be the last one added (id '4')
+    expect(result.current.currentState.lists[0].id).toBe('4')
   })
 
   it('should clear history', () => {

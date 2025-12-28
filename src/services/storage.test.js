@@ -97,5 +97,42 @@ describe('storage service', () => {
     const result = storage.save(data)
     expect(result).toBe(true)
   })
+
+  it('should handle save error gracefully', () => {
+    const originalSetItem = localStorageMock.setItem
+    localStorageMock.setItem = jest.fn(() => {
+      throw new Error('Storage error')
+    })
+
+    const data = { lists: [] }
+    const result = storage.save(data)
+    expect(result).toBe(false)
+
+    localStorageMock.setItem = originalSetItem
+  })
+
+  it('should handle load error gracefully', () => {
+    const originalGetItem = localStorageMock.getItem
+    localStorageMock.getItem = jest.fn(() => {
+      throw new Error('Storage error')
+    })
+
+    const result = storage.load()
+    expect(result).toBeNull()
+
+    localStorageMock.getItem = originalGetItem
+  })
+
+  it('should handle clear error gracefully', () => {
+    const originalRemoveItem = localStorageMock.removeItem
+    localStorageMock.removeItem = jest.fn(() => {
+      throw new Error('Storage error')
+    })
+
+    const result = storage.clear()
+    expect(result).toBe(false)
+
+    localStorageMock.removeItem = originalRemoveItem
+  })
 })
 

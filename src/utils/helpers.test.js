@@ -17,7 +17,13 @@ describe('helpers', () => {
   })
 
   describe('debounce', () => {
-    jest.useFakeTimers()
+    beforeEach(() => {
+      jest.useFakeTimers()
+    })
+
+    afterEach(() => {
+      jest.useRealTimers()
+    })
 
     it('should delay function execution', () => {
       const func = jest.fn()
@@ -50,10 +56,6 @@ describe('helpers', () => {
       jest.advanceTimersByTime(100)
 
       expect(func).toHaveBeenCalledWith('arg1', 'arg2')
-    })
-
-    afterEach(() => {
-      jest.useRealTimers()
     })
   })
 })

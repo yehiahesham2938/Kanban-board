@@ -66,7 +66,7 @@ describe('ConfirmDialog', () => {
     expect(mockOnCancel).toHaveBeenCalled()
   })
 
-  it('should call onCancel when close button is clicked', () => {
+  it('should call onCancel when cancel button is clicked', () => {
     render(
       <ConfirmDialog
         isOpen={true}
@@ -76,8 +76,8 @@ describe('ConfirmDialog', () => {
         onCancel={mockOnCancel}
       />
     )
-    const closeButton = screen.getByLabelText('Close')
-    fireEvent.click(closeButton)
+    const cancelButton = screen.getByRole('button', { name: /cancel/i })
+    fireEvent.click(cancelButton)
     expect(mockOnCancel).toHaveBeenCalled()
   })
 })

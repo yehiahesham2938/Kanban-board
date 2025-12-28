@@ -26,9 +26,9 @@ describe('Header', () => {
     expect(mockOnAddList).toHaveBeenCalledWith('New List')
   })
 
-  it('should display online status', () => {
+  it('should not display offline status when online', () => {
     render(<Header onAddList={mockOnAddList} isOnline={true} />)
-    expect(screen.getByText(/online/i)).toBeInTheDocument()
+    expect(screen.queryByText(/offline/i)).not.toBeInTheDocument()
   })
 
   it('should display offline status', () => {

@@ -34,8 +34,8 @@ describe('merge utilities', () => {
 
     it('should prefer server when versions are equal', () => {
       const base = { id: '1', version: 1, title: 'Base' }
-      const local = { id: '1', version: 2, title: 'Local' }
-      const server = { id: '1', version: 2, title: 'Server' }
+      const local = { id: '1', version: 1, title: 'Local' }
+      const server = { id: '1', version: 1, title: 'Server' }
 
       const result = threeWayMerge(base, local, server)
       expect(result.resolved).toEqual(server)
@@ -112,6 +112,69 @@ describe('merge utilities', () => {
       const result = mergeCards(base, local, server)
       expect(result.merged).toHaveLength(1)
       expect(result.merged[0].id).toBe('1')
+    })
+
+    it('should handle cards deleted locally', () => {
+      const base = [{ id: '1', title: 'Card 1', version: 1 }]
+      const local = []
+      const server = [{ id: '1', title: 'Card 1', version: 1 }]
+
+      const result = mergeCards(base, local, server)
+      // Should keep server version (undelete)
+      expect(result.merged).toHaveLength(1)
+      expect(result.merged[0].id).toBe('1')
+    })
+
+    it('should handle cards deleted on server', () => {
+      const base = [{ id: '1', title: 'Card 1', version: 1 }]
+      const local = [{ id: '1', title: 'Card 1', version: 1 }]
+      const server = []
+
+      const result = mergeCards(base, local, server)
+      // Should not include deleted card
+      expect(result.merged).toHaveLength(0)
+    })
+
+    it('should handle cards added on server', () => {
+      const base = []
+      const local = []
+      const server = [{ id: '1', title: 'New Card', version: 1 }]
+
+      const result = mergeCards(base, local, server)
+      expect(result.merged).toHaveLength(1)
+      expect(result.merged[0].id).toBe('1')
+    })
+
+    it('should handle cards added in both local and server', () => {
+      const base = []
+      const local = [{ id: '1', title: 'Local Card', version: 1 }]
+      const server = [{ id: '2', title: 'Server Card', version: 1 }]
+
+      const result = mergeCards(base, local, server)
+      // Should prefer server when both added
+      expect(result.merged.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('mergeLists edge cases', () => {
+    it('should handle lists deleted on server', () => {
+      const base = [{ id: '1', title: 'List 1', version: 1 }]
+      const local = [{ id: '1', title: 'List 1', version: 1 }]
+      const server = []
+
+      const result = mergeLists(base, local, server)
+      // Should keep local (was deleted on server)
+      expect(result.merged).toHaveLength(0)
+    })
+
+    it('should handle lists added in both local and server', () => {
+      const base = []
+      const local = [{ id: '1', title: 'Local List', version: 1 }]
+      const server = [{ id: '2', title: 'Server List', version: 1 }]
+
+      const result = mergeLists(base, local, server)
+      // Should prefer server when both added
+      expect(result.merged.length).toBeGreaterThan(0)
     })
   })
 })

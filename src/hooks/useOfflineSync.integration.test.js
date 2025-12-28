@@ -75,6 +75,9 @@ describe('useOfflineSync Integration Tests', () => {
       expect(result.current.isOnline).toBe(true)
     })
 
+    // Clear any API calls that might have happened during initialization
+    jest.clearAllMocks()
+
     // 2. Go offline
     act(() => {
       navigator.onLine = false
@@ -85,11 +88,12 @@ describe('useOfflineSync Integration Tests', () => {
       expect(result.current.isOnline).toBe(false)
     })
 
-    // 3. Try to sync while offline (should not sync)
+    // 3. Try to sync while offline (should not sync because isOnline is false)
     await act(async () => {
       await result.current.syncQueue()
     })
 
+    // syncQueue should return early when offline, so API should not be called
     expect(api.createList).not.toHaveBeenCalled()
 
     // 4. Come back online
