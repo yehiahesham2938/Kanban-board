@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react'
 import { render } from '@testing-library/react'
 import { useBoardState } from './useBoardState'
-import { BoardProvider } from '../context/BoardProvider'
+import BoardProvider from '../context/BoardProvider'
 
 // Mock the services to avoid actual API calls
 jest.mock('../services/api', () => ({
@@ -28,6 +28,29 @@ jest.mock('../services/offlineQueue', () => ({
     enqueue: jest.fn(),
     getAll: jest.fn().mockReturnValue([]),
   },
+}))
+
+jest.mock('../services/baseVersionStorage', () => ({
+  baseVersionStorage: {
+    load: jest.fn().mockReturnValue(null),
+    save: jest.fn(),
+  },
+}))
+
+jest.mock('../hooks/useOfflineSync', () => ({
+  useOfflineSync: jest.fn(() => ({
+    isOnline: true,
+    isSyncing: false,
+    queueLength: 0,
+  })),
+}))
+
+jest.mock('../hooks/useSyncWithConflictResolution', () => ({
+  useSyncWithConflictResolution: jest.fn(() => ({
+    syncWithServer: jest.fn().mockResolvedValue({ conflicts: [], merged: null }),
+    resolveConflict: jest.fn(),
+    conflicts: [],
+  })),
 }))
 
 // Mock the BoardProvider context

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import React, { useState, useCallback, useRef, useEffect } from 'react'
 
 /**
  * Custom hook that provides multi-level undo/redo functionality for board operations.
@@ -48,6 +48,15 @@ export function useUndoRedo(initialState, maxHistorySize = 50) {
   const [history, setHistory] = useState([initialState])
   const [currentIndex, setCurrentIndex] = useState(0)
   const isUndoRedoRef = useRef(false)
+  const historyRef = useRef([initialState])
+  const currentIndexRef = useRef(0)
+
+  // Keep refs in sync with state
+  React.useEffect(() => {
+    historyRef.current = history
+    currentIndexRef.current = currentIndex
+  }, [history, currentIndex])
+  
 
   /**
    * Get the current state from history
@@ -73,7 +82,9 @@ export function useUndoRedo(initialState, maxHistorySize = 50) {
     isUndoRedoRef.current = true
     setCurrentIndex((prev) => {
       const newIndex = prev - 1
-      return Math.max(0, newIndex)
+      const finalIndex = Math.max(0, newIndex)
+      currentIndexRef.current = finalIndex
+      return finalIndex
     })
     
     // Reset flag after state update
@@ -90,15 +101,18 @@ export function useUndoRedo(initialState, maxHistorySize = 50) {
 
     isUndoRedoRef.current = true
     setCurrentIndex((prev) => {
+      const currentHistory = historyRef.current
       const newIndex = prev + 1
-      return Math.min(history.length - 1, newIndex)
+      const finalIndex = Math.min(currentHistory.length - 1, newIndex)
+      currentIndexRef.current = finalIndex
+      return finalIndex
     })
     
     // Reset flag after state update
     setTimeout(() => {
       isUndoRedoRef.current = false
     }, 0)
-  }, [canRedo, history.length])
+  }, [canRedo])
 
   /**
    * Add a new state to the history
@@ -112,38 +126,45 @@ export function useUndoRedo(initialState, maxHistorySize = 50) {
         return
       }
 
-      setHistory((prevHistory) => {
-        const newHistory = [...prevHistory.slice(0, currentIndex + 1), newState]
-        
-        // Limit history size
-        if (newHistory.length > maxHistorySize) {
-          // Remove oldest entries
-          const excess = newHistory.length - maxHistorySize
-          return newHistory.slice(excess)
-        }
-        
-        return newHistory
-      })
-
-      setCurrentIndex((prev) => {
-        const newIndex = prev + 1
-        // Adjust if history was truncated
-        const adjustedHistory = [...history.slice(0, currentIndex + 1), newState]
-        if (adjustedHistory.length > maxHistorySize) {
-          return maxHistorySize - 1
-        }
-        return newIndex
-      })
+      // Get current values from refs for synchronous access
+      const prevHistory = historyRef.current
+      const prevIndex = currentIndexRef.current
+      
+      // Truncate future history and add new state
+      const newHistory = [...prevHistory.slice(0, prevIndex + 1), newState]
+      
+      // Limit history size
+      let finalHistory = newHistory
+      let finalIndex = newHistory.length - 1
+      
+      if (newHistory.length > maxHistorySize) {
+        // Remove oldest entries from the beginning
+        const excess = newHistory.length - maxHistorySize
+        finalHistory = newHistory.slice(excess)
+        // After truncation, index should point to the last item
+        finalIndex = finalHistory.length - 1
+      }
+      
+      // Update refs immediately for synchronous access
+      historyRef.current = finalHistory
+      currentIndexRef.current = finalIndex
+      
+      // Update state (useEffect will keep refs in sync, but we've already updated them)
+      setHistory(finalHistory)
+      setCurrentIndex(finalIndex)
     },
-    [currentIndex, maxHistorySize, history]
+    [maxHistorySize]
   )
 
   /**
    * Clear all history and reset to initial state
    */
   const clearHistory = useCallback(() => {
-    setHistory([initialState])
+    const newHistory = [initialState]
+    setHistory(newHistory)
     setCurrentIndex(0)
+    historyRef.current = newHistory
+    currentIndexRef.current = 0
   }, [initialState])
 
   /**
@@ -152,15 +173,17 @@ export function useUndoRedo(initialState, maxHistorySize = 50) {
    */
   const jumpToHistory = useCallback(
     (index) => {
-      if (index >= 0 && index < history.length) {
+      const currentHistory = historyRef.current
+      if (index >= 0 && index < currentHistory.length) {
         isUndoRedoRef.current = true
         setCurrentIndex(index)
+        currentIndexRef.current = index
         setTimeout(() => {
           isUndoRedoRef.current = false
         }, 0)
       }
     },
-    [history.length]
+    []
   )
 
   return {

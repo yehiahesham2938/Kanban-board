@@ -8,10 +8,10 @@ describe('App', () => {
     expect(titleElement).toBeInTheDocument()
   })
 
-  it('renders welcome message', () => {
+  it('renders empty board message', () => {
     render(<App />)
-    const welcomeMessage = screen.getByText(/welcome to your kanban board application/i)
-    expect(welcomeMessage).toBeInTheDocument()
+    const emptyMessage = screen.getByText(/your board is empty/i)
+    expect(emptyMessage).toBeInTheDocument()
   })
 })
 

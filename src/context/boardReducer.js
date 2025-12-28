@@ -22,10 +22,10 @@ export function boardReducer(state, action) {
     case ACTION_TYPES.ADD_LIST: {
       const now = new Date().toISOString()
       const newList = {
-        id: helpers.generateId(),
+        id: action.payload.id || helpers.generateId(),
         title: action.payload.title || 'New List',
-        cards: [],
-        archived: false,
+        cards: action.payload.cards || [],
+        archived: action.payload.archived || false,
         version: 1,
         lastModifiedAt: now,
         createdAt: now,
@@ -197,7 +197,8 @@ export function boardReducer(state, action) {
     }
 
     case ACTION_TYPES.REORDER_CARD: {
-      const { listId, cardId, newIndex } = action.payload
+      const { listId, cardId, newIndex, destinationIndex } = action.payload
+      const targetIndex = newIndex !== undefined ? newIndex : destinationIndex
 
       const list = state.lists.find((l) => l.id === listId)
       if (!list) return state
@@ -214,7 +215,7 @@ export function boardReducer(state, action) {
         lastModifiedAt: now,
         updatedAt: now,
       }
-      newCards.splice(newIndex, 0, updatedCard)
+      newCards.splice(targetIndex, 0, updatedCard)
 
       return {
         ...state,
