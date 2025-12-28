@@ -18,46 +18,58 @@ function SortableCard({ card, listId, onEdit, onDelete }) {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 1,
   }
 
-  // Create listeners that don't interfere with button clicks
-  const dragListeners = {
-    ...listeners,
-    onPointerDown: (e) => {
-      // Don't start drag if clicking on a button or interactive element
-      if (
-        e.target.tagName === 'BUTTON' ||
-        e.target.closest('button') ||
-        e.target.closest('[role="button"]')
-      ) {
+  // Filter listeners to prevent drag on button clicks
+  const handlePointerDown = React.useCallback(
+    (e) => {
+      const target = e.target
+      
+      // Only block if clicking directly on a button element (not role="button" on other elements)
+      if (target.tagName === 'BUTTON') {
+        e.stopPropagation()
         return
       }
-      if (listeners.onPointerDown) {
+      
+      // Check if we're inside a button element (the delete button)
+      const buttonElement = target.closest('button')
+      if (buttonElement) {
+        e.stopPropagation()
+        return
+      }
+      
+      // Allow drag for everything else - call the original listener
+      if (listeners?.onPointerDown) {
         listeners.onPointerDown(e)
       }
     },
-    onMouseDown: (e) => {
-      // Don't start drag if clicking on a button or interactive element
-      if (
-        e.target.tagName === 'BUTTON' ||
-        e.target.closest('button') ||
-        e.target.closest('[role="button"]')
-      ) {
-        return
-      }
-      if (listeners.onMouseDown) {
-        listeners.onMouseDown(e)
-      }
-    },
-  }
+    [listeners]
+  )
+
+  // Combine listeners with our custom handler
+  const combinedListeners = React.useMemo(() => {
+    if (!listeners) return {}
+    return {
+      ...listeners,
+      onPointerDown: handlePointerDown,
+    }
+  }, [listeners, handlePointerDown])
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...dragListeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...combinedListeners}
+      className="cursor-grab active:cursor-grabbing"
+    >
       <Card
         card={card}
         listId={listId}
         onEdit={onEdit}
         onDelete={onDelete}
+        isDragging={isDragging}
       />
     </div>
   )
@@ -76,4 +88,5 @@ SortableCard.propTypes = {
 }
 
 export default SortableCard
+
 

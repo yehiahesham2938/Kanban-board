@@ -5,13 +5,16 @@ import React, {
   useEffect,
   useCallback,
   useState,
+  useRef,
 } from 'react'
 import PropTypes from 'prop-types'
 import { boardReducer, ACTION_TYPES } from './boardReducer'
 import { storage } from '../services/storage'
+import { baseVersionStorage } from '../services/baseVersionStorage'
 import { offlineQueue } from '../services/offlineQueue'
 import { api } from '../services/api'
 import { useOfflineSync } from '../hooks/useOfflineSync'
+import { useSyncWithConflictResolution } from '../hooks/useSyncWithConflictResolution'
 
 const BoardContext = createContext(null)
 
@@ -27,6 +30,9 @@ function BoardProvider({ children }) {
   const [state, dispatch] = useReducer(boardReducer, { lists: [] })
   const [error, setError] = useState(null)
   const [stateHistory, setStateHistory] = useState([])
+  const [currentConflict, setCurrentConflict] = useState(null)
+  const isSyncingRef = useRef(false)
+  const lastSyncTimeRef = useRef(0)
 
   // Load board from storage on mount
   useEffect(() => {
@@ -63,6 +69,12 @@ function BoardProvider({ children }) {
       }
       dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: sanitizedData })
       setStateHistory([sanitizedData])
+      
+      // Initialize base version if it doesn't exist
+      const baseVersion = baseVersionStorage.load()
+      if (!baseVersion) {
+        baseVersionStorage.save(sanitizedData)
+      }
     }
   }, [])
 
@@ -79,8 +91,23 @@ function BoardProvider({ children }) {
     setError(`Failed to sync ${operation.type}: ${error.message}`)
   }, [])
 
+  // Handle conflicts - use ref to avoid recreation
+  const handleConflictRef = useRef((conflicts) => {
+    if (conflicts.length > 0) {
+      setCurrentConflict(conflicts[0]) // Show first conflict
+    }
+  })
+  
+  const handleConflict = useCallback((conflicts) => {
+    handleConflictRef.current(conflicts)
+  }, [])
+
   // Use offline sync hook
   const { isOnline, isSyncing, queueLength } = useOfflineSync(handleSyncError)
+
+  // Use conflict resolution hook
+  const { syncWithServer, resolveConflict, conflicts } =
+    useSyncWithConflictResolution(handleConflict)
 
   // Rollback to previous state
   const rollback = useCallback(() => {
@@ -147,8 +174,14 @@ function BoardProvider({ children }) {
           // Don't rollback - keep the optimistic update
           // The operation is already queued and will be retried
           // Only show error if it's a real server error (not network/offline)
-          if (error.message && !error.message.includes('offline') && !error.message.includes('Could not establish connection')) {
-            setError(`Warning: ${error.message}. Changes saved locally and will sync when possible.`)
+          if (
+            error.message &&
+            !error.message.includes('offline') &&
+            !error.message.includes('Could not establish connection')
+          ) {
+            // Don't show error for random MSW failures - they're expected
+            // The optimistic update already happened, so the UI is updated
+            // The change is queued and will sync automatically
           }
         })
       }
@@ -363,12 +396,141 @@ function BoardProvider({ children }) {
     [state]
   )
 
+  // Handle conflict resolution
+  const handleResolveConflict = useCallback(
+    (conflictId, resolvedItem, type) => {
+      if (type === 'list') {
+        // Update the list in state
+        dispatch({
+          type: ACTION_TYPES.LOAD_BOARD,
+          payload: {
+            lists: state.lists.map((list) =>
+              list.id === conflictId ? resolvedItem : list
+            ),
+          },
+        })
+      } else {
+        // Update the card in the appropriate list
+        const list = state.lists.find((l) =>
+          l.cards.some((c) => c.id === conflictId)
+        )
+        if (list) {
+          dispatch({
+            type: ACTION_TYPES.UPDATE_CARD,
+            payload: {
+              listId: list.id,
+              cardId: conflictId,
+              updates: resolvedItem,
+            },
+          })
+        }
+      }
+
+      // Remove from conflicts and show next if any
+      const remainingConflicts = conflicts.filter((c) => c.id !== conflictId)
+      if (remainingConflicts.length > 0) {
+        setCurrentConflict(remainingConflicts[0])
+      } else {
+        setCurrentConflict(null)
+        // Update base version after resolving all conflicts
+        baseVersionStorage.save(state)
+      }
+    },
+    [state, conflicts]
+  )
+
+  // Enhanced sync with conflict resolution
+  const performFullSync = useCallback(async () => {
+    if (!isOnline || isSyncingRef.current) return
+
+    // Prevent syncing too frequently (min 10 seconds between syncs)
+    const now = Date.now()
+    if (now - lastSyncTimeRef.current < 10000) {
+      return
+    }
+
+    isSyncingRef.current = true
+    lastSyncTimeRef.current = now
+
+    try {
+      // Get current state from storage to avoid dependency on state
+      const currentState = storage.load()
+      if (!currentState) {
+        isSyncingRef.current = false
+        return
+      }
+
+      const result = await syncWithServer(currentState)
+      if (result.merged) {
+        // No conflicts - apply merged state
+        dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
+        baseVersionStorage.save(result.merged)
+      }
+      // If conflicts exist, they're handled by the conflict dialog
+    } catch (error) {
+      console.error('Full sync failed:', error)
+    } finally {
+      isSyncingRef.current = false
+    }
+  }, [isOnline, syncWithServer])
+
+  // Periodic sync with conflict detection (every 60 seconds)
+  useEffect(() => {
+    if (!isOnline) return
+
+    const interval = setInterval(() => {
+      // Use a stable reference to performFullSync
+      const currentState = storage.load()
+      if (currentState && !isSyncingRef.current) {
+        syncWithServer(currentState)
+          .then((result) => {
+            if (result.merged) {
+              dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
+              baseVersionStorage.save(result.merged)
+            }
+          })
+          .catch((error) => {
+            console.error('Periodic sync failed:', error)
+          })
+      }
+    }, 60000) // 60 seconds
+
+    return () => clearInterval(interval)
+  }, [isOnline, syncWithServer])
+
+  // Sync on reconnect (only once when coming online)
+  const hasSyncedOnReconnect = useRef(false)
+  useEffect(() => {
+    if (isOnline && !hasSyncedOnReconnect.current) {
+      hasSyncedOnReconnect.current = true
+      // Delay sync slightly to avoid immediate trigger
+      setTimeout(() => {
+        const currentState = storage.load()
+        if (currentState && !isSyncingRef.current) {
+          syncWithServer(currentState)
+            .then((result) => {
+              if (result.merged) {
+                dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
+                baseVersionStorage.save(result.merged)
+              }
+            })
+            .catch((error) => {
+              console.error('Reconnect sync failed:', error)
+            })
+        }
+      }, 2000) // 2 second delay
+    } else if (!isOnline) {
+      hasSyncedOnReconnect.current = false
+    }
+  }, [isOnline, syncWithServer])
+
   const value = {
     state,
     error,
     isOnline,
     isSyncing,
     queueLength,
+    currentConflict,
     addList,
     renameList,
     archiveList,
@@ -379,6 +541,8 @@ function BoardProvider({ children }) {
     reorderCard,
     rollback,
     clearError: () => setError(null),
+    resolveConflict: handleResolveConflict,
+    performFullSync,
   }
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>

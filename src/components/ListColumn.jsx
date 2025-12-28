@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react'
 import PropTypes from 'prop-types'
 import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import SortableCard from './SortableCard'
 import InlineEditor from './InlineEditor'
 import ConfirmDialog from './ConfirmDialog'
@@ -56,7 +57,7 @@ function ListColumn({
   return (
     <div
       ref={setNodeRef}
-      className="bg-gray-100 rounded-lg p-4 w-80 flex-shrink-0"
+      className="bg-gray-100 rounded-lg p-4 w-80 flex-shrink-0 min-h-[200px]"
     >
       <div className="flex justify-between items-center mb-3">
         {isRenaming ? (
@@ -98,17 +99,22 @@ function ListColumn({
         )}
       </div>
 
-      <div className="space-y-2 mb-3 max-h-[calc(100vh-300px)] overflow-y-auto">
-        {activeCards.map((card) => (
-          <SortableCard
-            key={card.id}
-            card={card}
-            listId={list.id}
-            onEdit={onEditCard}
-            onDelete={onDeleteCard}
-          />
-        ))}
-      </div>
+      <SortableContext
+        items={activeCards.map((c) => c.id)}
+        strategy={verticalListSortingStrategy}
+      >
+        <div className="space-y-2 mb-3 max-h-[calc(100vh-300px)] overflow-y-auto">
+          {activeCards.map((card) => (
+            <SortableCard
+              key={card.id}
+              card={card}
+              listId={list.id}
+              onEdit={onEditCard}
+              onDelete={onDeleteCard}
+            />
+          ))}
+        </div>
+      </SortableContext>
 
       {isAddingCard ? (
         <InlineEditor

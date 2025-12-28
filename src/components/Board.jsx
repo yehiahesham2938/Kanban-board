@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react'
 import {
   DndContext,
   closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -25,7 +26,11 @@ function Board() {
   const [activeListId, setActiveListId] = useState(null)
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement before drag starts
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -62,13 +67,14 @@ function Board() {
 
   const handleDragStart = useCallback((event) => {
     const { active } = event
-    const cardId = active.id
+    const cardId = active.id.toString()
     const list = activeLists.find((l) =>
       l.cards.some((c) => c.id === cardId)
     )
     if (list) {
       setActiveCardId(cardId)
       setActiveListId(list.id)
+      console.log('Drag started:', { cardId, listId: list.id })
     }
   }, [activeLists])
 
@@ -81,60 +87,91 @@ function Board() {
   const handleDragEnd = useCallback(
     (event) => {
       const { active, over } = event
+      console.log('Drag end:', { active: active.id, over: over?.id })
 
-      if (!over || !activeCardId || !activeListId) {
+      if (!over) {
+        console.log('No drop target')
         setActiveCardId(null)
         setActiveListId(null)
         return
       }
 
-      const cardId = activeCardId
-      const sourceListId = activeListId
+      const cardId = active.id.toString()
+      const sourceList = activeLists.find((list) =>
+        list.cards.some((c) => c.id === cardId)
+      )
 
-      // Check if dropped on a list (droppable)
-      if (over.id === sourceListId) {
-        // Dropped on same list, might be reordering
+      if (!sourceList) {
+        console.log('Source list not found')
         setActiveCardId(null)
         setActiveListId(null)
         return
       }
 
+      const sourceListId = sourceList.id
+
+      // Check if dropped on a list (droppable area)
       const destinationList = activeLists.find((list) => list.id === over.id)
-      if (destinationList && destinationList.id !== sourceListId) {
-        // Moving to a different list
-        const destinationIndex = destinationList.cards.length
-        moveCard(cardId, sourceListId, destinationList.id, destinationIndex)
-      } else {
-        // Check if dropped on another card
-        const destinationCardId = over.id
-        const destinationList = activeLists.find((list) =>
-          list.cards.some((c) => c.id === destinationCardId)
+      if (destinationList) {
+        // Dropped on a list - append to end
+        if (destinationList.id !== sourceListId) {
+          console.log('Moving card to different list:', {
+            cardId,
+            from: sourceListId,
+            to: destinationList.id,
+          })
+          moveCard(cardId, sourceListId, destinationList.id, destinationList.cards.length)
+        } else {
+          console.log('Dropped on same list, no action')
+        }
+        setActiveCardId(null)
+        setActiveListId(null)
+        return
+      }
+
+      // Check if dropped on another card
+      const destinationCardId = over.id.toString()
+      const cardDestinationList = activeLists.find((list) =>
+        list.cards.some((c) => c.id === destinationCardId)
+      )
+
+      if (cardDestinationList) {
+        const destinationIndex = cardDestinationList.cards.findIndex(
+          (c) => c.id === destinationCardId
         )
 
-        if (destinationList) {
-          const destinationIndex = destinationList.cards.findIndex(
-            (c) => c.id === destinationCardId
-          )
-
-          if (destinationList.id === sourceListId) {
-            // Reordering within same list
-            const sourceIndex = destinationList.cards.findIndex(
-              (c) => c.id === cardId
-            )
-            if (sourceIndex !== -1 && destinationIndex !== -1 && sourceIndex !== destinationIndex) {
-              reorderCard(sourceListId, cardId, destinationIndex)
-            }
-          } else {
-            // Moving to different list
-            moveCard(cardId, sourceListId, destinationList.id, destinationIndex)
+        if (cardDestinationList.id === sourceListId) {
+          // Reordering within same list
+          const sourceIndex = sourceList.cards.findIndex((c) => c.id === cardId)
+          if (
+            sourceIndex !== -1 &&
+            destinationIndex !== -1 &&
+            sourceIndex !== destinationIndex
+          ) {
+            console.log('Reordering card within list:', {
+              cardId,
+              listId: sourceListId,
+              from: sourceIndex,
+              to: destinationIndex,
+            })
+            reorderCard(sourceListId, cardId, destinationIndex)
           }
+        } else {
+          // Moving to different list
+          console.log('Moving card to different list (on card):', {
+            cardId,
+            from: sourceListId,
+            to: cardDestinationList.id,
+            index: destinationIndex,
+          })
+          moveCard(cardId, sourceListId, cardDestinationList.id, destinationIndex)
         }
       }
 
       setActiveCardId(null)
       setActiveListId(null)
     },
-    [activeCardId, activeListId, activeLists, moveCard, reorderCard]
+    [activeLists, moveCard, reorderCard]
   )
 
   const handleDragOver = useCallback((event) => {
@@ -148,7 +185,7 @@ function Board() {
     <div className="flex-1 overflow-x-auto">
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={closestCorners}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         onDragOver={handleDragOver}
@@ -164,21 +201,15 @@ function Board() {
         ) : (
           <div className="flex gap-4 p-4 min-h-full">
             {activeLists.map((list) => (
-              <SortableContext
+              <ListColumn
                 key={list.id}
-                id={list.id}
-                items={list.cards.map((c) => c.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <ListColumn
-                  list={list}
-                  onAddCard={addCard}
-                  onEditCard={handleEditCard}
-                  onDeleteCard={deleteCard}
-                  onRenameList={renameList}
-                  onArchiveList={archiveList}
-                />
-              </SortableContext>
+                list={list}
+                onAddCard={addCard}
+                onEditCard={handleEditCard}
+                onDeleteCard={deleteCard}
+                onRenameList={renameList}
+                onArchiveList={archiveList}
+              />
             ))}
           </div>
         )}

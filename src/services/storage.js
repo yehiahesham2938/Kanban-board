@@ -33,11 +33,15 @@ export const storage = {
         lists: (data.lists || []).map((list) => ({
           id: String(list.id || ''),
           title: String(list.title || ''),
+          version: Number(list.version || 1),
+          lastModifiedAt: String(list.lastModifiedAt || list.createdAt || ''),
           cards: (list.cards || []).map((card) => ({
             id: String(card.id || ''),
             title: String(card.title || ''),
             description: String(card.description || ''),
             tags: Array.isArray(card.tags) ? card.tags.map(String) : [],
+            version: Number(card.version || 1),
+            lastModifiedAt: String(card.lastModifiedAt || card.updatedAt || ''),
             createdAt: String(card.createdAt || ''),
             updatedAt: String(card.updatedAt || ''),
           })),

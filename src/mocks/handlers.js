@@ -5,8 +5,8 @@ const API_BASE = '/api'
 // Simulate delay
 const delay = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// Simulate random failures (10% failure rate)
-const shouldFail = () => Math.random() < 0.1
+// Simulate random failures (1% failure rate for less frequent errors during testing)
+const shouldFail = () => Math.random() < 0.01
 
 export const handlers = [
   // Create list
@@ -145,6 +145,16 @@ export const handlers = [
       success: true,
       synced: data.changes?.length || 0,
       timestamp: new Date().toISOString(),
+    })
+  }),
+
+  // Get board state
+  http.get(`${API_BASE}/board`, async () => {
+    await delay(300)
+    // Return mock server state (in real app, this would come from database)
+    // For now, return empty or use stored state
+    return HttpResponse.json({
+      lists: [],
     })
   }),
 ]

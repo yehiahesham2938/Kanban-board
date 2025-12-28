@@ -1,10 +1,49 @@
 import React, { memo, useCallback } from 'react'
 import PropTypes from 'prop-types'
 
-const Card = memo(function Card({ card, listId, onEdit, onDelete }) {
-  const handleClick = useCallback(() => {
-    if (onEdit) onEdit(card, listId)
-  }, [card, listId, onEdit])
+const Card = memo(function Card({ card, listId, onEdit, onDelete, isDragging }) {
+  const wasDraggedRef = React.useRef(false)
+  const clickTimeoutRef = React.useRef(null)
+
+  // Track if drag occurred
+  React.useEffect(() => {
+    if (isDragging) {
+      wasDraggedRef.current = true
+      // Clear any pending click
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current)
+        clickTimeoutRef.current = null
+      }
+    } else {
+      // Reset after drag ends
+      setTimeout(() => {
+        wasDraggedRef.current = false
+      }, 150)
+    }
+  }, [isDragging])
+
+  const handleClick = useCallback(
+    (e) => {
+      // Don't open edit modal if we just dragged
+      if (wasDraggedRef.current || isDragging) {
+        wasDraggedRef.current = false
+        return
+      }
+      
+      // Small delay to check if drag will start
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current)
+      }
+      
+      clickTimeoutRef.current = setTimeout(() => {
+        // Only open if we didn't drag
+        if (!wasDraggedRef.current && !isDragging && onEdit) {
+          onEdit(card, listId)
+        }
+      }, 200)
+    },
+    [card, listId, onEdit, isDragging]
+  )
 
   const handleDelete = useCallback(
     (e) => {
@@ -15,10 +54,19 @@ const Card = memo(function Card({ card, listId, onEdit, onDelete }) {
     [card.id, listId, onDelete]
   )
 
+  React.useEffect(() => {
+    return () => {
+      if (clickTimeoutRef.current) {
+        clearTimeout(clickTimeoutRef.current)
+      }
+    }
+  }, [])
+
   return (
     <div
       onClick={handleClick}
-      className="bg-white rounded-lg shadow-sm p-3 mb-2 cursor-pointer hover:shadow-md transition-shadow border border-gray-200"
+      className="bg-white rounded-lg shadow-sm p-3 mb-2 hover:shadow-md transition-shadow border border-gray-200 select-none cursor-pointer"
+      style={{ pointerEvents: 'auto' }}
     >
       <div className="flex justify-between items-start mb-2">
         <h3 className="font-semibold text-gray-800 text-sm flex-1">
@@ -73,6 +121,7 @@ Card.propTypes = {
   listId: PropTypes.string.isRequired,
   onEdit: PropTypes.func,
   onDelete: PropTypes.func,
+  isDragging: PropTypes.bool,
 }
 
 Card.displayName = 'Card'

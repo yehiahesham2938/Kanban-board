@@ -3,6 +3,7 @@ import BoardProvider from './context/BoardProvider'
 import Header from './components/Header'
 import Toolbar from './components/Toolbar'
 import Board from './components/Board'
+import MergeResolutionDialog from './components/MergeResolutionDialog'
 import { useBoardContext } from './context/BoardProvider'
 import { storage } from './services/storage'
 
@@ -13,6 +14,8 @@ function AppContent() {
     isOnline,
     isSyncing,
     queueLength,
+    currentConflict,
+    resolveConflict,
     clearError,
   } = useBoardContext()
 
@@ -64,6 +67,19 @@ function AppContent() {
       )}
       <Toolbar onClearBoard={handleClearBoard} onExportData={handleExportData} />
       <Board />
+      {currentConflict && (
+        <MergeResolutionDialog
+          isOpen={true}
+          conflict={currentConflict}
+          onResolve={(id, resolved, type) => {
+            resolveConflict(id, resolved, type)
+          }}
+          onCancel={() => {
+            // Skip this conflict, show next or close
+            clearError()
+          }}
+        />
+      )}
     </div>
   )
 }

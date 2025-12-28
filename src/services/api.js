@@ -147,4 +147,12 @@ export const api = {
     })
     return handleResponse(response)
   },
+
+  // Get full board state from server
+  getBoardState: async () => {
+    const response = await fetch(`${API_BASE_URL}/board`, {
+      method: 'GET',
+    })
+    return handleResponse(response)
+  },
 }

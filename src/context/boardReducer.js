@@ -20,12 +20,15 @@ export function boardReducer(state, action) {
     }
 
     case ACTION_TYPES.ADD_LIST: {
+      const now = new Date().toISOString()
       const newList = {
         id: helpers.generateId(),
         title: action.payload.title || 'New List',
         cards: [],
         archived: false,
-        createdAt: new Date().toISOString(),
+        version: 1,
+        lastModifiedAt: now,
+        createdAt: now,
       }
       return {
         ...state,
@@ -40,7 +43,14 @@ export function boardReducer(state, action) {
       return {
         ...state,
         lists: state.lists.map((list) =>
-          list.id === listId ? { ...list, title: newTitle } : list
+          list.id === listId
+            ? {
+                ...list,
+                title: newTitle,
+                version: (list.version || 1) + 1,
+                lastModifiedAt: new Date().toISOString(),
+              }
+            : list
         ),
       }
     }
@@ -50,27 +60,42 @@ export function boardReducer(state, action) {
       return {
         ...state,
         lists: state.lists.map((list) =>
-          list.id === listId ? { ...list, archived: true } : list
+          list.id === listId
+            ? {
+                ...list,
+                archived: true,
+                version: (list.version || 1) + 1,
+                lastModifiedAt: new Date().toISOString(),
+              }
+            : list
         ),
       }
     }
 
     case ACTION_TYPES.ADD_CARD: {
       const { listId, card } = action.payload
+      const now = new Date().toISOString()
       const newCard = {
-        id: helpers.generateId(),
+        id: card.id || helpers.generateId(),
         title: card.title || 'New Card',
         description: card.description || '',
         tags: card.tags || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        version: 1,
+        lastModifiedAt: now,
+        createdAt: now,
+        updatedAt: now,
       }
 
       return {
         ...state,
         lists: state.lists.map((list) =>
           list.id === listId
-            ? { ...list, cards: [...list.cards, newCard] }
+            ? {
+                ...list,
+                cards: [...list.cards, newCard],
+                version: (list.version || 1) + 1,
+                lastModifiedAt: now,
+              }
             : list
         ),
       }
@@ -78,6 +103,7 @@ export function boardReducer(state, action) {
 
     case ACTION_TYPES.UPDATE_CARD: {
       const { listId, cardId, updates } = action.payload
+      const now = new Date().toISOString()
       return {
         ...state,
         lists: state.lists.map((list) => {
@@ -86,9 +112,17 @@ export function boardReducer(state, action) {
             ...list,
             cards: list.cards.map((card) =>
               card.id === cardId
-                ? { ...card, ...updates, updatedAt: new Date().toISOString() }
+                ? {
+                    ...card,
+                    ...updates,
+                    version: (card.version || 1) + 1,
+                    lastModifiedAt: now,
+                    updatedAt: now,
+                  }
                 : card
             ),
+            version: (list.version || 1) + 1,
+            lastModifiedAt: now,
           }
         }),
       }
@@ -96,11 +130,17 @@ export function boardReducer(state, action) {
 
     case ACTION_TYPES.DELETE_CARD: {
       const { listId, cardId } = action.payload
+      const now = new Date().toISOString()
       return {
         ...state,
         lists: state.lists.map((list) =>
           list.id === listId
-            ? { ...list, cards: list.cards.filter((card) => card.id !== cardId) }
+            ? {
+                ...list,
+                cards: list.cards.filter((card) => card.id !== cardId),
+                version: (list.version || 1) + 1,
+                lastModifiedAt: now,
+              }
             : list
         ),
       }
@@ -120,18 +160,36 @@ export function boardReducer(state, action) {
       const card = sourceList.cards.find((c) => c.id === cardId)
       if (!card) return state
 
+      const now = new Date().toISOString()
+      const updatedCard = {
+        ...card,
+        version: (card.version || 1) + 1,
+        lastModifiedAt: now,
+        updatedAt: now,
+      }
+
       const newSourceCards = sourceList.cards.filter((c) => c.id !== cardId)
       const newDestinationCards = [...destinationList.cards]
-      newDestinationCards.splice(destinationIndex, 0, card)
+      newDestinationCards.splice(destinationIndex, 0, updatedCard)
 
       return {
         ...state,
         lists: state.lists.map((list) => {
           if (list.id === sourceListId) {
-            return { ...list, cards: newSourceCards }
+            return {
+              ...list,
+              cards: newSourceCards,
+              version: (list.version || 1) + 1,
+              lastModifiedAt: now,
+            }
           }
           if (list.id === destinationListId) {
-            return { ...list, cards: newDestinationCards }
+            return {
+              ...list,
+              cards: newDestinationCards,
+              version: (list.version || 1) + 1,
+              lastModifiedAt: now,
+            }
           }
           return list
         }),
@@ -147,14 +205,28 @@ export function boardReducer(state, action) {
       const cardIndex = list.cards.findIndex((c) => c.id === cardId)
       if (cardIndex === -1) return state
 
+      const now = new Date().toISOString()
       const newCards = [...list.cards]
       const [movedCard] = newCards.splice(cardIndex, 1)
-      newCards.splice(newIndex, 0, movedCard)
+      const updatedCard = {
+        ...movedCard,
+        version: (movedCard.version || 1) + 1,
+        lastModifiedAt: now,
+        updatedAt: now,
+      }
+      newCards.splice(newIndex, 0, updatedCard)
 
       return {
         ...state,
         lists: state.lists.map((l) =>
-          l.id === listId ? { ...l, cards: newCards } : l
+          l.id === listId
+            ? {
+                ...l,
+                cards: newCards,
+                version: (l.version || 1) + 1,
+                lastModifiedAt: now,
+              }
+            : l
         ),
       }
     }
