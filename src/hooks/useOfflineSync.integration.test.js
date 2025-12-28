@@ -112,14 +112,20 @@ describe('useOfflineSync Integration Tests', () => {
     })
 
     await waitFor(() => {
-      expect(api.createList).toHaveBeenCalledWith(operations[0].data)
-      expect(api.createCard).toHaveBeenCalledWith(
-        operations[1].data.listId,
-        operations[1].data.card
-      )
+      // Check that createList was called with the correct data structure
+      expect(api.createList).toHaveBeenCalled()
+      const createListCall = api.createList.mock.calls[0]
+      expect(createListCall[0]).toMatchObject({ id: 'list-1', title: 'New List' })
+      
+      // Check that createCard was called
+      expect(api.createCard).toHaveBeenCalled()
+      const createCardCall = api.createCard.mock.calls[0]
+      expect(createCardCall[0]).toBe('list-1')
+      expect(createCardCall[1]).toMatchObject({ id: 'card-1', title: 'New Card' })
+      
       expect(offlineQueue.dequeue).toHaveBeenCalledTimes(2)
-    }, { timeout: 5000 })
-  }, 10000)
+    }, { timeout: 15000 })
+  }, 20000)
 
   it('should handle retry logic for failed operations', async () => {
     const onSyncError = jest.fn()

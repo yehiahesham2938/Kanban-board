@@ -30,10 +30,14 @@ describe('offlineQueue service', () => {
   it('should enqueue an operation', () => {
     const operation = {
       type: 'CREATE_LIST',
-      payload: { id: 'list-1', title: 'Test' },
+      data: { id: 'list-1', title: 'Test' },
     }
-    offlineQueue.enqueue(operation)
+    const result = offlineQueue.enqueue(operation)
+    expect(result).toBe(true)
     expect(localStorageMock.setItem).toHaveBeenCalled()
+    const operations = offlineQueue.getAll()
+    expect(operations).toHaveLength(1)
+    expect(operations[0].type).toBe('CREATE_LIST')
   })
 
   it('should get all queued operations', () => {

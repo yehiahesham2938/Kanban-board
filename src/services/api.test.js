@@ -143,5 +143,22 @@ describe('api service', () => {
       })
     )
   })
+
+  it('should handle network errors', async () => {
+    fetch.mockRejectedValueOnce(new Error('Network error'))
+
+    await expect(api.createList({})).rejects.toThrow('Network error')
+  })
+
+  it('should handle JSON parse errors', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => {
+        throw new Error('Invalid JSON')
+      },
+    })
+
+    await expect(api.createList({})).rejects.toThrow()
+  })
 })
 

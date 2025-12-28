@@ -269,5 +269,169 @@ describe('useOfflineSync', () => {
 
     expect(result.current.syncError).toBe(null)
   })
+
+  it('should sync UPDATE_LIST operation', async () => {
+    const operation = {
+      id: '1',
+      type: 'UPDATE_LIST',
+      data: { listId: 'list-1', updates: { title: 'Updated List' } },
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+    api.updateList.mockResolvedValue({ id: 'list-1', title: 'Updated List' })
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(api.updateList).toHaveBeenCalledWith('list-1', { title: 'Updated List' })
+      expect(offlineQueue.dequeue).toHaveBeenCalledWith('1')
+    })
+  }, 10000)
+
+  it('should sync DELETE_LIST operation', async () => {
+    const operation = {
+      id: '1',
+      type: 'DELETE_LIST',
+      data: { listId: 'list-1' },
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+    api.deleteList.mockResolvedValue({ success: true })
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(api.deleteList).toHaveBeenCalledWith('list-1')
+      expect(offlineQueue.dequeue).toHaveBeenCalledWith('1')
+    })
+  }, 10000)
+
+  it('should sync UPDATE_CARD operation', async () => {
+    const operation = {
+      id: '1',
+      type: 'UPDATE_CARD',
+      data: { listId: 'list-1', cardId: 'card-1', updates: { title: 'Updated Card' } },
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+    api.updateCard.mockResolvedValue({ id: 'card-1', title: 'Updated Card' })
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(api.updateCard).toHaveBeenCalledWith('list-1', 'card-1', { title: 'Updated Card' })
+      expect(offlineQueue.dequeue).toHaveBeenCalledWith('1')
+    })
+  }, 10000)
+
+  it('should sync DELETE_CARD operation', async () => {
+    const operation = {
+      id: '1',
+      type: 'DELETE_CARD',
+      data: { listId: 'list-1', cardId: 'card-1' },
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+    api.deleteCard.mockResolvedValue({ success: true })
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(api.deleteCard).toHaveBeenCalledWith('list-1', 'card-1')
+      expect(offlineQueue.dequeue).toHaveBeenCalledWith('1')
+    })
+  }, 10000)
+
+  it('should sync MOVE_CARD operation', async () => {
+    const operation = {
+      id: '1',
+      type: 'MOVE_CARD',
+      data: { cardId: 'card-1', sourceListId: 'list-1', destinationListId: 'list-2', destinationIndex: 0 },
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+    api.moveCard.mockResolvedValue({ success: true })
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(api.moveCard).toHaveBeenCalledWith('card-1', 'list-1', 'list-2', 0)
+      expect(offlineQueue.dequeue).toHaveBeenCalledWith('1')
+    })
+  }, 10000)
+
+  it('should handle unknown operation type', async () => {
+    const operation = {
+      id: '1',
+      type: 'UNKNOWN_OPERATION',
+      data: {},
+    }
+
+    let queue = [operation]
+    offlineQueue.getAll.mockImplementation(() => [...queue])
+    offlineQueue.dequeue.mockImplementation((id) => {
+      queue = queue.filter(op => op.id !== id)
+      return true
+    })
+
+    const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+
+    const { result } = renderHook(() => useOfflineSync())
+
+    await act(async () => {
+      await result.current.syncQueue()
+    })
+
+    await waitFor(() => {
+      expect(consoleSpy).toHaveBeenCalledWith('Unknown operation type:', 'UNKNOWN_OPERATION')
+    }, { timeout: 3000 })
+
+    consoleSpy.mockRestore()
+  }, 20000)
 })
 

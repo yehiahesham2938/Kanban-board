@@ -14,6 +14,7 @@ module.exports = {
     '!src/main.jsx',
     '!src/**/*.test.{js,jsx}',
     '!src/**/__tests__/**',
+    '!src/mocks/**', // Exclude mocks from coverage as they're setup code
   ],
   coverageThreshold: {
     global: {

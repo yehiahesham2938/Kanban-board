@@ -63,8 +63,8 @@ describe('MergeResolutionDialog', () => {
         onCancel={mockOnCancel}
       />
     )
-    expect(screen.getByText(/local version/i)).toBeInTheDocument()
-    expect(screen.getByText(/server version/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/local version/i)[0]).toBeInTheDocument()
+    expect(screen.getAllByText(/server version/i)[0]).toBeInTheDocument()
     expect(screen.getByText('Local Title')).toBeInTheDocument()
     expect(screen.getByText('Server Title')).toBeInTheDocument()
   })
@@ -101,7 +101,8 @@ describe('MergeResolutionDialog', () => {
     )
 
     // Click on server version option
-    const serverOption = screen.getByText(/server version/i).closest('div[role="button"]')
+    const serverOptions = screen.getAllByText(/server version/i)
+    const serverOption = serverOptions[0].closest('div[role="button"]')
     fireEvent.click(serverOption)
 
     // Click resolve button
@@ -172,7 +173,7 @@ describe('MergeResolutionDialog', () => {
       />
     )
 
-    expect(screen.getByText(/card/i)).toBeInTheDocument()
+    expect(screen.getByText(/resolve conflict: card/i)).toBeInTheDocument()
     expect(screen.getByText('Local Card')).toBeInTheDocument()
     expect(screen.getByText('Server Card')).toBeInTheDocument()
   })
@@ -194,7 +195,8 @@ describe('MergeResolutionDialog', () => {
     expect(screen.getByDisplayValue('local')).toBeChecked()
 
     // Test Space key
-    const serverOption = screen.getByText(/server version/i).closest('div[role="button"]')
+    const serverOptions = screen.getAllByText(/server version/i)
+    const serverOption = serverOptions[0].closest('div[role="button"]')
     fireEvent.keyDown(serverOption, { key: ' ' })
     expect(screen.getByDisplayValue('server')).toBeChecked()
   })
