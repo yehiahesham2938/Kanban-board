@@ -1,11 +1,13 @@
-import React from 'react'
+import React, { Suspense, lazy } from 'react'
 import BoardProvider from './context/BoardProvider'
 import Header from './components/Header'
 import Toolbar from './components/Toolbar'
 import Board from './components/Board'
-import MergeResolutionDialog from './components/MergeResolutionDialog'
 import { useBoardContext } from './context/BoardProvider'
 import { storage } from './services/storage'
+
+// Lazy load heavy components
+const MergeResolutionDialog = lazy(() => import('./components/MergeResolutionDialog'))
 
 function AppContent() {
   const {
@@ -68,17 +70,30 @@ function AppContent() {
       <Toolbar onClearBoard={handleClearBoard} onExportData={handleExportData} />
       <Board />
       {currentConflict && (
-        <MergeResolutionDialog
-          isOpen={true}
-          conflict={currentConflict}
-          onResolve={(id, resolved, type) => {
-            resolveConflict(id, resolved, type)
-          }}
-          onCancel={() => {
-            // Skip this conflict, show next or close
-            clearError()
-          }}
-        />
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-700">Loading conflict resolution...</span>
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <MergeResolutionDialog
+            isOpen={true}
+            conflict={currentConflict}
+            onResolve={(id, resolved, type) => {
+              resolveConflict(id, resolved, type)
+            }}
+            onCancel={() => {
+              // Skip this conflict, show next or close
+              clearError()
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, memo, Suspense, lazy } from 'react'
 import {
   DndContext,
   closestCenter,
@@ -16,10 +16,12 @@ import {
 } from '@dnd-kit/sortable'
 import { useBoardContext } from '../context/BoardProvider'
 import ListColumn from './ListColumn'
-import CardDetailModal from './CardDetailModal'
 import Card from './Card'
 
-function Board() {
+// Lazy load heavy components
+const CardDetailModal = lazy(() => import('./CardDetailModal'))
+
+const Board = memo(function Board() {
   const { state, addList, renameList, archiveList, addCard, updateCard, deleteCard, moveCard, reorderCard } = useBoardContext()
   const [editingCard, setEditingCard] = useState(null)
   const [activeCardId, setActiveCardId] = useState(null)
@@ -74,7 +76,6 @@ function Board() {
     if (list) {
       setActiveCardId(cardId)
       setActiveListId(list.id)
-      console.log('Drag started:', { cardId, listId: list.id })
     }
   }, [activeLists])
 
@@ -87,10 +88,8 @@ function Board() {
   const handleDragEnd = useCallback(
     (event) => {
       const { active, over } = event
-      console.log('Drag end:', { active: active.id, over: over?.id })
 
       if (!over) {
-        console.log('No drop target')
         setActiveCardId(null)
         setActiveListId(null)
         return
@@ -102,7 +101,6 @@ function Board() {
       )
 
       if (!sourceList) {
-        console.log('Source list not found')
         setActiveCardId(null)
         setActiveListId(null)
         return
@@ -115,14 +113,7 @@ function Board() {
       if (destinationList) {
         // Dropped on a list - append to end
         if (destinationList.id !== sourceListId) {
-          console.log('Moving card to different list:', {
-            cardId,
-            from: sourceListId,
-            to: destinationList.id,
-          })
           moveCard(cardId, sourceListId, destinationList.id, destinationList.cards.length)
-        } else {
-          console.log('Dropped on same list, no action')
         }
         setActiveCardId(null)
         setActiveListId(null)
@@ -148,22 +139,10 @@ function Board() {
             destinationIndex !== -1 &&
             sourceIndex !== destinationIndex
           ) {
-            console.log('Reordering card within list:', {
-              cardId,
-              listId: sourceListId,
-              from: sourceIndex,
-              to: destinationIndex,
-            })
             reorderCard(sourceListId, cardId, destinationIndex)
           }
         } else {
           // Moving to different list
-          console.log('Moving card to different list (on card):', {
-            cardId,
-            from: sourceListId,
-            to: cardDestinationList.id,
-            index: destinationIndex,
-          })
           moveCard(cardId, sourceListId, cardDestinationList.id, destinationIndex)
         }
       }
@@ -223,17 +202,30 @@ function Board() {
       </DndContext>
 
       {editingCard && (
-        <CardDetailModal
-          isOpen={true}
-          card={editingCard.card}
-          listId={editingCard.listId}
-          onSave={handleSaveCard}
-          onClose={() => setEditingCard(null)}
-          onDelete={handleDeleteCard}
-        />
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                <div className="flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                  <span className="ml-3 text-gray-700">Loading card editor...</span>
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <CardDetailModal
+            isOpen={true}
+            card={editingCard.card}
+            listId={editingCard.listId}
+            onSave={handleSaveCard}
+            onClose={() => setEditingCard(null)}
+            onDelete={handleDeleteCard}
+          />
+        </Suspense>
       )}
     </div>
   )
-}
+})
 
 export default Board

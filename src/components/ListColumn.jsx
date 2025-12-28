@@ -1,10 +1,14 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useState, useCallback, useMemo, memo } from 'react'
 import PropTypes from 'prop-types'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import SortableCard from './SortableCard'
+import VirtualizedCardList from './VirtualizedCardList'
 import InlineEditor from './InlineEditor'
 import ConfirmDialog from './ConfirmDialog'
+
+// Threshold for using virtualization (30+ cards)
+const VIRTUALIZATION_THRESHOLD = 30
 
 function ListColumn({
   list,
@@ -103,17 +107,32 @@ function ListColumn({
         items={activeCards.map((c) => c.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="space-y-2 mb-3 max-h-[calc(100vh-300px)] overflow-y-auto">
-          {activeCards.map((card) => (
-            <SortableCard
-              key={card.id}
-              card={card}
+        {activeCards.length >= VIRTUALIZATION_THRESHOLD ? (
+          // Use virtualization for large lists (30+ cards)
+          <div className="mb-3" style={{ height: 'calc(100vh - 300px)', maxHeight: '600px' }}>
+            <VirtualizedCardList
+              cards={activeCards}
               listId={list.id}
-              onEdit={onEditCard}
-              onDelete={onDeleteCard}
+              onEditCard={onEditCard}
+              onDeleteCard={onDeleteCard}
+              itemHeight={100}
+              containerHeight={600}
             />
-          ))}
-        </div>
+          </div>
+        ) : (
+          // Regular rendering for small lists (< 30 cards)
+          <div className="space-y-2 mb-3 max-h-[calc(100vh-300px)] overflow-y-auto">
+            {activeCards.map((card) => (
+              <SortableCard
+                key={card.id}
+                card={card}
+                listId={list.id}
+                onEdit={onEditCard}
+                onDelete={onDeleteCard}
+              />
+            ))}
+          </div>
+        )}
       </SortableContext>
 
       {isAddingCard ? (
@@ -163,4 +182,4 @@ ListColumn.propTypes = {
   onArchiveList: PropTypes.func.isRequired,
 }
 
-export default ListColumn
+export default memo(ListColumn)

@@ -15,25 +15,27 @@ async function enableMocking() {
     const { worker } = await import('./mocks/browser')
     await worker.start({
       onUnhandledRequest: (request, print) => {
+        // Get the URL pathname to determine if this is an API request
+        let pathname = ''
         try {
-          // Get the URL from the request
-        // MSW request.url can be a string or URL object
-          const urlString = typeof request.url === 'string' 
-            ? request.url 
-            : request.url?.href || request.url?.toString() || ''
-          
-          // Only bypass requests that are not API requests
-          // This prevents MSW from trying to handle page loads and other non-API requests
-          if (urlString && !urlString.includes('/api')) {
-            return // Bypass non-API requests
-          }
-          
-          // For unhandled API requests, use the default behavior
-          print.warning()
-        } catch (error) {
-          // If we can't parse the URL, just bypass the request
+          const url = typeof request.url === 'string' 
+            ? new URL(request.url)
+            : request.url instanceof URL
+            ? request.url
+            : new URL(request.url?.href || request.url?.toString() || '', window.location.origin)
+          pathname = url.pathname
+        } catch (e) {
+          // If we can't parse the URL, bypass it
           return
         }
+        
+        // Only handle API requests - bypass everything else silently
+        if (!pathname.startsWith('/api')) {
+          return // Bypass non-API requests (page loads, static assets, etc.)
+        }
+        
+        // For unhandled API requests, show a warning
+        print.warning()
       },
       serviceWorker: {
         url: '/mockServiceWorker.js',
