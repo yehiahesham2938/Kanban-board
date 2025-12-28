@@ -9,7 +9,8 @@ const Card = memo(function Card({ card, listId, onEdit, onDelete }) {
   const handleDelete = useCallback(
     (e) => {
       e.stopPropagation()
-      if (onDelete) onDelete(card.id, listId)
+      e.preventDefault()
+      if (onDelete) onDelete(listId, card.id)
     },
     [card.id, listId, onDelete]
   )
@@ -26,8 +27,17 @@ const Card = memo(function Card({ card, listId, onEdit, onDelete }) {
         <button
           type="button"
           onClick={handleDelete}
-          className="text-gray-400 hover:text-red-600 ml-2 text-xs"
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+          }}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+          }}
+          className="text-gray-400 hover:text-red-600 ml-2 text-xs pointer-events-auto z-10 relative"
           aria-label="Delete card"
+          style={{ pointerEvents: 'auto' }}
         >
           ×
         </button>

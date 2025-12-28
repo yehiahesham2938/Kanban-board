@@ -20,8 +20,39 @@ function SortableCard({ card, listId, onEdit, onDelete }) {
     opacity: isDragging ? 0.5 : 1,
   }
 
+  // Create listeners that don't interfere with button clicks
+  const dragListeners = {
+    ...listeners,
+    onPointerDown: (e) => {
+      // Don't start drag if clicking on a button or interactive element
+      if (
+        e.target.tagName === 'BUTTON' ||
+        e.target.closest('button') ||
+        e.target.closest('[role="button"]')
+      ) {
+        return
+      }
+      if (listeners.onPointerDown) {
+        listeners.onPointerDown(e)
+      }
+    },
+    onMouseDown: (e) => {
+      // Don't start drag if clicking on a button or interactive element
+      if (
+        e.target.tagName === 'BUTTON' ||
+        e.target.closest('button') ||
+        e.target.closest('[role="button"]')
+      ) {
+        return
+      }
+      if (listeners.onMouseDown) {
+        listeners.onMouseDown(e)
+      }
+    },
+  }
+
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div ref={setNodeRef} style={style} {...attributes} {...dragListeners}>
       <Card
         card={card}
         listId={listId}

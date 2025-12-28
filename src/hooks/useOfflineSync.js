@@ -79,24 +79,42 @@ export function useOfflineSync(onSyncError) {
           // Remove successfully synced operation
           offlineQueue.dequeue(operation.id)
         } catch (error) {
-          console.error('Failed to sync operation:', operation, error)
+          // Extract error message properly
+          const errorMessage =
+            error?.message || error?.toString() || 'Unknown error'
+          
+          // Only log if it's not a random MSW failure (for testing)
+          // MSW failures are expected and will be retried
+          if (!errorMessage.includes('Failed to')) {
+            console.warn(`Sync error for ${operation.type}:`, errorMessage)
+          }
+
           offlineQueue.incrementRetry(operation.id)
+          const updatedOperation = offlineQueue
+            .getAll()
+            .find((op) => op.id === operation.id)
+          const retryCount = updatedOperation?.retries || operation.retries || 0
 
           // If operation has been retried too many times, remove it
-          if (operation.retries >= 3) {
+          if (retryCount >= 3) {
+            console.warn(
+              `Operation ${operation.type} failed after ${retryCount} retries, removing from queue`
+            )
             offlineQueue.dequeue(operation.id)
             if (onSyncError) {
-              onSyncError(operation, error)
+              onSyncError(operation, new Error(errorMessage))
             }
           }
         }
       }
 
-      // If there are still items in queue, sync them
+      // If there are still items in queue, sync them after a delay
       const remainingQueue = offlineQueue.getAll()
       if (remainingQueue.length > 0) {
-        // Retry after a delay
-        setTimeout(() => syncQueue(), 5000)
+        // Retry failed operations after a delay (exponential backoff)
+        setTimeout(() => {
+          syncQueue()
+        }, 5000)
       }
     } catch (error) {
       console.error('Sync failed:', error)

@@ -7,14 +7,16 @@ const API_BASE_URL = '/api'
 // Helper function to handle API responses
 async function handleResponse(response) {
   if (!response.ok) {
-    let errorMessage = response.statusText
+    let errorMessage = response.statusText || 'Request failed'
     try {
-      const error = await response.json()
-      errorMessage = error.error || errorMessage
+      const errorData = await response.json()
+      errorMessage = errorData.error || errorData.message || errorMessage
     } catch {
       // If response is not JSON, use status text
     }
-    throw new Error(errorMessage)
+    const error = new Error(errorMessage)
+    error.status = response.status
+    throw error
   }
   try {
     return await response.json()
