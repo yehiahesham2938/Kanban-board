@@ -2,6 +2,12 @@ import { http, HttpResponse } from 'msw'
 
 const API_BASE = '/api'
 
+// Helper to check if a request should be handled by MSW
+// Only handle API requests, not page loads or static assets
+function shouldHandleRequest(url) {
+  return url.pathname.startsWith(API_BASE)
+}
+
 // Simulate delay
 const delay = (ms = 500) => new Promise((resolve) => setTimeout(resolve, ms))
 

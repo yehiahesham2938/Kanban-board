@@ -37,10 +37,23 @@ async function apiCall(fetchFn) {
       // Return a mock success response
       return {}
     }
+    
+    // Handle "Failed to fetch" errors - these are network errors
+    // They will be handled by the offline queue
+    if (error.message && error.message.includes('Failed to fetch')) {
+      // Check if we're offline
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        throw new Error('You are offline. Changes will be synced when you reconnect.')
+      }
+      // Otherwise, it's a network error that will be queued
+      throw new Error('Network error: Failed to fetch')
+    }
+    
     // If it's a network error and we're offline, that's expected
-    if (!navigator.onLine) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       throw new Error('You are offline. Changes will be synced when you reconnect.')
     }
+    
     // Re-throw other errors
     throw error
   }
