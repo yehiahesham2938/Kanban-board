@@ -33,11 +33,12 @@ function BoardProvider({ children }) {
   const [currentConflict, setCurrentConflict] = useState(null)
   const isSyncingRef = useRef(false)
   const lastSyncTimeRef = useRef(0)
+  const hasLoadedRef = useRef(false) // Track if initial load has completed
 
   // Load board from storage on mount
   useEffect(() => {
     const savedData = storage.load()
-    if (savedData && savedData.lists && Array.isArray(savedData.lists)) {
+    if (savedData && savedData.lists && Array.isArray(savedData.lists) && savedData.lists.length > 0) {
       // Validate and sanitize loaded data
       const sanitizedData = {
         lists: savedData.lists.map((list) => {
@@ -76,11 +77,17 @@ function BoardProvider({ children }) {
         baseVersionStorage.save(sanitizedData)
       }
     }
+    // Mark as loaded after attempting to load (even if no data was found)
+    hasLoadedRef.current = true
   }, [])
 
   // Save board to storage whenever state changes
+  // BUT only after initial load has completed to prevent overwriting seeded data
   useEffect(() => {
-    if (state.lists.length > 0 || storage.load()) {
+    // Only save if:
+    // 1. Initial load has completed (prevents overwriting on mount)
+    // 2. State actually has lists (prevents saving empty state)
+    if (hasLoadedRef.current && state.lists.length > 0) {
       storage.save(state)
     }
   }, [state])
@@ -461,10 +468,13 @@ function BoardProvider({ children }) {
       }
 
       const result = await syncWithServer(currentState)
-      if (result.merged) {
-        // No conflicts - apply merged state
+      if (result.merged && result.merged.lists && result.merged.lists.length > 0) {
+        // No conflicts - apply merged state (only if it has data)
         dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
         baseVersionStorage.save(result.merged)
+      } else if (result.merged && (!result.merged.lists || result.merged.lists.length === 0)) {
+        // Merged state is empty - don't overwrite local data
+        console.warn('Sync returned empty state, preserving local data')
       }
       // If conflicts exist, they're handled by the conflict dialog
     } catch (error) {
@@ -481,12 +491,15 @@ function BoardProvider({ children }) {
     const interval = setInterval(() => {
       // Use a stable reference to performFullSync
       const currentState = storage.load()
-      if (currentState && !isSyncingRef.current) {
+      if (currentState && currentState.lists && currentState.lists.length > 0 && !isSyncingRef.current) {
         syncWithServer(currentState)
           .then((result) => {
-            if (result.merged) {
+            if (result.merged && result.merged.lists && result.merged.lists.length > 0) {
               dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
               baseVersionStorage.save(result.merged)
+            } else if (result.merged && (!result.merged.lists || result.merged.lists.length === 0)) {
+              // Merged state is empty - don't overwrite local data
+              console.warn('Periodic sync returned empty state, preserving local data')
             }
           })
           .catch((error) => {
@@ -499,26 +512,39 @@ function BoardProvider({ children }) {
   }, [isOnline, syncWithServer])
 
   // Sync on reconnect (only once when coming online)
+  // Use a ref to track if data has been loaded to prevent syncing before initial load
+  const dataLoadedRef = useRef(false)
+  useEffect(() => {
+    // Mark data as loaded after initial load completes
+    if (state.lists.length > 0) {
+      dataLoadedRef.current = true
+    }
+  }, [state.lists.length])
+
   const hasSyncedOnReconnect = useRef(false)
   useEffect(() => {
-    if (isOnline && !hasSyncedOnReconnect.current) {
+    // Only sync if data has been loaded and we're online
+    if (isOnline && !hasSyncedOnReconnect.current && dataLoadedRef.current) {
       hasSyncedOnReconnect.current = true
-      // Delay sync slightly to avoid immediate trigger
+      // Delay sync to ensure data is fully loaded
       setTimeout(() => {
         const currentState = storage.load()
-        if (currentState && !isSyncingRef.current) {
+        if (currentState && currentState.lists && currentState.lists.length > 0 && !isSyncingRef.current) {
           syncWithServer(currentState)
             .then((result) => {
-              if (result.merged) {
+              if (result.merged && result.merged.lists && result.merged.lists.length > 0) {
                 dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: result.merged })
                 baseVersionStorage.save(result.merged)
+              } else if (result.merged && (!result.merged.lists || result.merged.lists.length === 0)) {
+                // Merged state is empty - don't overwrite local data
+                console.warn('Reconnect sync returned empty state, preserving local data')
               }
             })
             .catch((error) => {
               console.error('Reconnect sync failed:', error)
             })
         }
-      }, 2000) // 2 second delay
+      }, 3000) // 3 second delay to ensure data is loaded
     } else if (!isOnline) {
       hasSyncedOnReconnect.current = false
     }

@@ -21,9 +21,15 @@ let mockServerState = {
 }
 
 // Helper to get state from localStorage if available (for seeded data)
+// Note: The app uses 'kanban-board-data' as the storage key
 function getInitialState() {
   try {
-    const stored = localStorage.getItem('kanban-board-state')
+    // Try the correct storage key first
+    let stored = localStorage.getItem('kanban-board-data')
+    if (!stored) {
+      // Fallback to old key for backwards compatibility
+      stored = localStorage.getItem('kanban-board-state')
+    }
     if (stored) {
       const parsed = JSON.parse(stored)
       if (parsed && parsed.lists && Array.isArray(parsed.lists)) {

@@ -69,7 +69,7 @@
     })
   }
 
-  function generateCard(listId) {
+  function generateCard(_listId) {
     const now = new Date().toISOString()
     const title = cardTitles[Math.floor(Math.random() * cardTitles.length)]
     const description = Math.random() > 0.5 
@@ -106,6 +106,7 @@
       version: 1,
       lastModifiedAt: now,
       createdAt: now,
+      updatedAt: now,
     }
   }
 
@@ -126,18 +127,41 @@
 
   function saveData(data) {
     try {
+      // Check if data already exists
+      const existing = localStorage.getItem(STORAGE_KEY)
+      if (existing) {
+        const overwrite = confirm(
+          '⚠️ Data already exists in localStorage. Do you want to overwrite it?\n\n' +
+          'Click OK to overwrite, or Cancel to keep existing data.'
+        )
+        if (!overwrite) {
+          console.log('❌ Seeding cancelled - existing data preserved')
+          return false
+        }
+      }
+      
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+      
+      // Verify the data was saved
+      const verified = localStorage.getItem(STORAGE_KEY)
+      if (!verified) {
+        throw new Error('Data was not saved - verification failed')
+      }
+      
       console.log('✅ Data saved successfully!')
       console.log(`📊 Generated ${data.lists.length} lists`)
       const totalCards = data.lists.reduce((sum, list) => sum + list.cards.length, 0)
       console.log(`📋 Total cards: ${totalCards}`)
       console.log(`💾 Storage key: ${STORAGE_KEY}`)
+      console.log('\n📋 List breakdown:')
       data.lists.forEach(list => {
         console.log(`  - ${list.title}: ${list.cards.length} cards`)
       })
+      console.log('\n💡 Tip: Refresh the page to see your data!')
       return true
     } catch (error) {
       console.error('❌ Failed to save data:', error)
+      console.error('Error details:', error.message)
       return false
     }
   }

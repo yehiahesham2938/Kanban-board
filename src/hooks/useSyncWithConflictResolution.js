@@ -34,6 +34,16 @@ export function useSyncWithConflictResolution(onConflict) {
           serverData = { lists: [] }
         }
 
+        // Safeguard: If local has data but server is empty and no base version exists,
+        // don't sync - preserve local data (this handles seeded data on first load)
+        if (!baseVersion && localData.lists && localData.lists.length > 0 && 
+            (!serverData.lists || serverData.lists.length === 0)) {
+          // Initialize base version with local data to prevent future overwrites
+          baseVersionStorage.save(localData)
+          setIsSyncing(false)
+          return { conflicts: [], merged: localData }
+        }
+
         // Perform three-way merge
         const baseLists = baseVersion?.lists || []
         const localLists = localData.lists || []
