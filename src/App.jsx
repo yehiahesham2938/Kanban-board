@@ -7,7 +7,14 @@ import { useBoardContext } from './context/BoardProvider'
 import { storage } from './services/storage'
 
 function AppContent() {
-  const { addList } = useBoardContext()
+  const {
+    addList,
+    error,
+    isOnline,
+    isSyncing,
+    queueLength,
+    clearError,
+  } = useBoardContext()
 
   const handleClearBoard = () => {
     if (
@@ -36,7 +43,25 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
-      <Header onAddList={addList} />
+      <Header
+        onAddList={addList}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        queueLength={queueLength}
+      />
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 mx-6 mt-2 flex justify-between items-center">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={clearError}
+            className="text-red-700 hover:text-red-900"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <Toolbar onClearBoard={handleClearBoard} onExportData={handleExportData} />
       <Board />
     </div>

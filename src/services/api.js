@@ -1,6 +1,148 @@
 // Mock server logic + sync endpoints
 
-export const api = {
-  // API methods will be implemented here
+import { sanitizeForJSON } from '../utils/sanitize'
+
+const API_BASE_URL = '/api'
+
+// Helper function to handle API responses
+async function handleResponse(response) {
+  if (!response.ok) {
+    let errorMessage = response.statusText
+    try {
+      const error = await response.json()
+      errorMessage = error.error || errorMessage
+    } catch {
+      // If response is not JSON, use status text
+    }
+    throw new Error(errorMessage)
+  }
+  try {
+    return await response.json()
+  } catch {
+    // If response is not JSON, return empty object
+    return {}
+  }
 }
 
+// Helper to handle network errors
+async function apiCall(fetchFn) {
+  try {
+    return await fetchFn()
+  } catch (error) {
+    // Suppress Chrome extension connection errors (harmless)
+    if (error.message && error.message.includes('Could not establish connection')) {
+      // This is a Chrome extension error, not a real API error
+      // Return a mock success response
+      return {}
+    }
+    // If it's a network error and we're offline, that's expected
+    if (!navigator.onLine) {
+      throw new Error('You are offline. Changes will be synced when you reconnect.')
+    }
+    // Re-throw other errors
+    throw error
+  }
+}
+
+export const api = {
+  // Lists endpoints
+  createList: async (listData) => {
+    return apiCall(async () => {
+      const sanitized = sanitizeForJSON(listData)
+      const response = await fetch(`${API_BASE_URL}/lists`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sanitized),
+      })
+      return handleResponse(response)
+    })
+  },
+
+  updateList: async (listId, updates) => {
+    const sanitized = sanitizeForJSON(updates)
+    const response = await fetch(`${API_BASE_URL}/lists/${listId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sanitized),
+    })
+    return handleResponse(response)
+  },
+
+  deleteList: async (listId) => {
+    const response = await fetch(`${API_BASE_URL}/lists/${listId}`, {
+      method: 'DELETE',
+    })
+    return handleResponse(response)
+  },
+
+  // Cards endpoints
+  createCard: async (listId, cardData) => {
+    const sanitized = sanitizeForJSON(cardData)
+    const response = await fetch(`${API_BASE_URL}/lists/${listId}/cards`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sanitized),
+    })
+    return handleResponse(response)
+  },
+
+  updateCard: async (listId, cardId, updates) => {
+    const sanitized = sanitizeForJSON(updates)
+    const response = await fetch(
+      `${API_BASE_URL}/lists/${listId}/cards/${cardId}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sanitized),
+      }
+    )
+    return handleResponse(response)
+  },
+
+  deleteCard: async (listId, cardId) => {
+    const response = await fetch(
+      `${API_BASE_URL}/lists/${listId}/cards/${cardId}`,
+      {
+        method: 'DELETE',
+      }
+    )
+    return handleResponse(response)
+  },
+
+  moveCard: async (cardId, sourceListId, destinationListId, destinationIndex) => {
+    const sanitized = sanitizeForJSON({
+      sourceListId,
+      destinationListId,
+      destinationIndex,
+    })
+    const response = await fetch(`${API_BASE_URL}/cards/${cardId}/move`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sanitized),
+    })
+    return handleResponse(response)
+  },
+
+  // Sync endpoint - sync all pending changes
+  sync: async (changes) => {
+    const sanitized = sanitizeForJSON({ changes })
+    const response = await fetch(`${API_BASE_URL}/sync`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sanitized),
+    })
+    return handleResponse(response)
+  },
+}

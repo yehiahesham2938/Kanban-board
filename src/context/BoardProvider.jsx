@@ -1,7 +1,17 @@
-import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  useState,
+} from 'react'
 import PropTypes from 'prop-types'
 import { boardReducer, ACTION_TYPES } from './boardReducer'
 import { storage } from '../services/storage'
+import { offlineQueue } from '../services/offlineQueue'
+import { api } from '../services/api'
+import { useOfflineSync } from '../hooks/useOfflineSync'
 
 const BoardContext = createContext(null)
 
@@ -15,6 +25,8 @@ export function useBoardContext() {
 
 function BoardProvider({ children }) {
   const [state, dispatch] = useReducer(boardReducer, { lists: [] })
+  const [error, setError] = useState(null)
+  const [stateHistory, setStateHistory] = useState([])
 
   // Load board from storage on mount
   useEffect(() => {
@@ -22,23 +34,35 @@ function BoardProvider({ children }) {
     if (savedData && savedData.lists && Array.isArray(savedData.lists)) {
       // Validate and sanitize loaded data
       const sanitizedData = {
-        lists: savedData.lists.map((list) => ({
-          ...list,
-          id: String(list.id || ''),
-          title: String(list.title || 'Untitled List'),
-          cards: Array.isArray(list.cards)
-            ? list.cards.map((card) => ({
-                ...card,
-                id: String(card.id || ''),
-                title: String(card.title || 'Untitled Card'),
-                description: String(card.description || ''),
-                tags: Array.isArray(card.tags) ? card.tags : [],
-              }))
-            : [],
-          archived: Boolean(list.archived),
-        })),
+        lists: savedData.lists.map((list) => {
+          // Ensure title is a string, not an object
+          let title = list.title
+          if (title && typeof title === 'object') {
+            title = String(title)
+          } else {
+            title = String(list.title || 'Untitled List')
+          }
+          
+          return {
+            id: String(list.id || ''),
+            title: title,
+            cards: Array.isArray(list.cards)
+              ? list.cards.map((card) => ({
+                  id: String(card.id || ''),
+                  title: String(card.title || 'Untitled Card'),
+                  description: String(card.description || ''),
+                  tags: Array.isArray(card.tags) ? card.tags.map(String) : [],
+                  createdAt: String(card.createdAt || ''),
+                  updatedAt: String(card.updatedAt || ''),
+                }))
+              : [],
+            archived: Boolean(list.archived),
+            createdAt: String(list.createdAt || ''),
+          }
+        }),
       }
       dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: sanitizedData })
+      setStateHistory([sanitizedData])
     }
   }, [])
 
@@ -49,36 +73,232 @@ function BoardProvider({ children }) {
     }
   }, [state])
 
-  const addList = useCallback((title) => {
-    dispatch({ type: ACTION_TYPES.ADD_LIST, payload: { title } })
+  // Handle sync errors
+  const handleSyncError = useCallback((operation, error) => {
+    console.error('Sync error for operation:', operation, error)
+    setError(`Failed to sync ${operation.type}: ${error.message}`)
   }, [])
 
-  const renameList = useCallback((listId, newTitle) => {
-    dispatch({ type: ACTION_TYPES.RENAME_LIST, payload: { listId, newTitle } })
-  }, [])
+  // Use offline sync hook
+  const { isOnline, isSyncing, queueLength } = useOfflineSync(handleSyncError)
 
-  const archiveList = useCallback((listId) => {
-    dispatch({ type: ACTION_TYPES.ARCHIVE_LIST, payload: { listId } })
-  }, [])
+  // Rollback to previous state
+  const rollback = useCallback(() => {
+    if (stateHistory.length > 1) {
+      const previousState = stateHistory[stateHistory.length - 2]
+      // Create a deep copy to avoid circular references
+      const sanitizedState = {
+        lists: (previousState.lists || []).map((list) => ({
+          id: String(list.id || ''),
+          title: String(list.title || ''),
+          cards: (list.cards || []).map((card) => ({
+            id: String(card.id || ''),
+            title: String(card.title || ''),
+            description: String(card.description || ''),
+            tags: Array.isArray(card.tags) ? card.tags.map(String) : [],
+            createdAt: String(card.createdAt || ''),
+            updatedAt: String(card.updatedAt || ''),
+          })),
+          archived: Boolean(list.archived),
+          createdAt: String(list.createdAt || ''),
+        })),
+      }
+      setStateHistory(stateHistory.slice(0, -1))
+      dispatch({ type: ACTION_TYPES.LOAD_BOARD, payload: sanitizedState })
+      storage.save(sanitizedState)
+    }
+  }, [stateHistory])
 
-  const addCard = useCallback((listId, card) => {
-    dispatch({ type: ACTION_TYPES.ADD_CARD, payload: { listId, card } })
-  }, [])
+  // Optimistic update helper
+  const optimisticUpdate = useCallback(
+    async (action, apiCall, queueOperation) => {
+      // Save current state for rollback (sanitize to avoid circular references)
+      const previousState = {
+        lists: (state.lists || []).map((list) => ({
+          id: String(list.id || ''),
+          title: String(list.title || ''),
+          cards: (list.cards || []).map((card) => ({
+            id: String(card.id || ''),
+            title: String(card.title || ''),
+            description: String(card.description || ''),
+            tags: Array.isArray(card.tags) ? card.tags.map(String) : [],
+            createdAt: String(card.createdAt || ''),
+            updatedAt: String(card.updatedAt || ''),
+          })),
+          archived: Boolean(list.archived),
+          createdAt: String(list.createdAt || ''),
+        })),
+      }
+      setStateHistory((prev) => [...prev, previousState])
 
-  const updateCard = useCallback((listId, cardId, updates) => {
-    dispatch({
-      type: ACTION_TYPES.UPDATE_CARD,
-      payload: { listId, cardId, updates },
-    })
-  }, [])
+      // Optimistically update UI immediately (don't wait for API)
+      dispatch(action)
 
-  const deleteCard = useCallback((listId, cardId) => {
-    dispatch({ type: ACTION_TYPES.DELETE_CARD, payload: { listId, cardId } })
-  }, [])
+      // Queue for offline sync (always queue, even if online)
+      if (queueOperation) {
+        offlineQueue.enqueue(queueOperation)
+      }
+
+      // Try to sync with server if online (but don't block UI)
+      if (isOnline && apiCall) {
+        // Don't await - let it run in background
+        apiCall().catch((error) => {
+          console.error('API call failed:', error)
+          // Don't rollback - keep the optimistic update
+          // The operation is already queued and will be retried
+          // Only show error if it's a real server error (not network/offline)
+          if (error.message && !error.message.includes('offline') && !error.message.includes('Could not establish connection')) {
+            setError(`Warning: ${error.message}. Changes saved locally and will sync when possible.`)
+          }
+        })
+      }
+    },
+    [state, isOnline]
+  )
+
+  const addList = useCallback(
+    async (title) => {
+      const listId = crypto.randomUUID()
+      const action = {
+        type: ACTION_TYPES.ADD_LIST,
+        payload: { title },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.createList({ id: listId, title, cards: [], archived: false }),
+          {
+            type: 'CREATE_LIST',
+            data: { listId, title, cards: [], archived: false },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to create list: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
+
+  const renameList = useCallback(
+    async (listId, newTitle) => {
+      const action = {
+        type: ACTION_TYPES.RENAME_LIST,
+        payload: { listId, newTitle },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.updateList(listId, { title: newTitle }),
+          {
+            type: 'UPDATE_LIST',
+            data: { listId, updates: { title: newTitle } },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to rename list: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
+
+  const archiveList = useCallback(
+    async (listId) => {
+      const action = {
+        type: ACTION_TYPES.ARCHIVE_LIST,
+        payload: { listId },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.deleteList(listId),
+          {
+            type: 'DELETE_LIST',
+            data: { listId },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to archive list: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
+
+  const addCard = useCallback(
+    async (listId, card) => {
+      const cardId = crypto.randomUUID()
+      const action = {
+        type: ACTION_TYPES.ADD_CARD,
+        payload: { listId, card: { ...card, id: cardId } },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.createCard(listId, { ...card, id: cardId }),
+          {
+            type: 'CREATE_CARD',
+            data: { listId, card: { ...card, id: cardId } },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to create card: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
+
+  const updateCard = useCallback(
+    async (listId, cardId, updates) => {
+      const action = {
+        type: ACTION_TYPES.UPDATE_CARD,
+        payload: { listId, cardId, updates },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.updateCard(listId, cardId, updates),
+          {
+            type: 'UPDATE_CARD',
+            data: { listId, cardId, updates },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to update card: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
+
+  const deleteCard = useCallback(
+    async (listId, cardId) => {
+      const action = {
+        type: ACTION_TYPES.DELETE_CARD,
+        payload: { listId, cardId },
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () => api.deleteCard(listId, cardId),
+          {
+            type: 'DELETE_CARD',
+            data: { listId, cardId },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to delete card: ${error.message}`)
+      }
+    },
+    [optimisticUpdate]
+  )
 
   const moveCard = useCallback(
-    (cardId, sourceListId, destinationListId, destinationIndex) => {
-      dispatch({
+    async (cardId, sourceListId, destinationListId, destinationIndex) => {
+      const action = {
         type: ACTION_TYPES.MOVE_CARD,
         payload: {
           cardId,
@@ -86,20 +306,69 @@ function BoardProvider({ children }) {
           destinationListId,
           destinationIndex,
         },
-      })
+      }
+
+      try {
+        await optimisticUpdate(
+          action,
+          () =>
+            api.moveCard(
+              cardId,
+              sourceListId,
+              destinationListId,
+              destinationIndex
+            ),
+          {
+            type: 'MOVE_CARD',
+            data: {
+              cardId,
+              sourceListId,
+              destinationListId,
+              destinationIndex,
+            },
+          }
+        )
+      } catch (error) {
+        setError(`Failed to move card: ${error.message}`)
+      }
     },
-    []
+    [optimisticUpdate]
   )
 
-  const reorderCard = useCallback((listId, cardId, newIndex) => {
-    dispatch({
-      type: ACTION_TYPES.REORDER_CARD,
-      payload: { listId, cardId, newIndex },
-    })
-  }, [])
+  const reorderCard = useCallback(
+    async (listId, cardId, newIndex) => {
+      const action = {
+        type: ACTION_TYPES.REORDER_CARD,
+        payload: { listId, cardId, newIndex },
+      }
+
+      try {
+        // Reordering within same list - queue for sync but no immediate API call
+        // The move will be synced when online
+        setStateHistory((prev) => [...prev, state])
+        dispatch(action)
+        offlineQueue.enqueue({
+          type: 'MOVE_CARD',
+          data: {
+            cardId,
+            sourceListId: listId,
+            destinationListId: listId,
+            destinationIndex: newIndex,
+          },
+        })
+      } catch (error) {
+        setError(`Failed to reorder card: ${error.message}`)
+      }
+    },
+    [state]
+  )
 
   const value = {
     state,
+    error,
+    isOnline,
+    isSyncing,
+    queueLength,
     addList,
     renameList,
     archiveList,
@@ -108,6 +377,8 @@ function BoardProvider({ children }) {
     deleteCard,
     moveCard,
     reorderCard,
+    rollback,
+    clearError: () => setError(null),
   }
 
   return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>
